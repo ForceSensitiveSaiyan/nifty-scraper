@@ -74,6 +74,6 @@ Copy `dist/NiftyDashboard.exe` anywhere—no Python required. Double‑click to 
 
 ## ⚖️ License
 
-This project is licensed under the MIT License © \[Your Name].
+This project is licensed under the MIT License © \FSJ.
 
 > *Crafted for traders and quants who demand the freshest vol data in one click.*

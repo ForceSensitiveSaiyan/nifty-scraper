@@ -1,11 +1,8 @@
 import os
 import pandas as pd
 from datetime import datetime
-from io import BytesIO
 from nsepython import option_chain
-import matplotlib.pyplot as plt
-from openpyxl.drawing.image import Image
-from openpyxl import load_workbook
+from openpyxl.chart import LineChart, Reference
 
 # 1) Fetch & prepare data once
 raw = option_chain("NIFTY")["records"]["data"]
@@ -24,19 +21,7 @@ df_iv = pd.DataFrame({
     "CE_IV":       df_front["CE"].map(lambda x: x.get("impliedVolatility") if isinstance(x, dict) else None)
 }).sort_values("StrikePrice")
 
-# 4) Create skew plot in-memory
-buf = BytesIO()
-plt.figure(figsize=(8,4))
-plt.plot(df_iv["StrikePrice"], df_iv["CE_IV"], label="Call IV")
-plt.plot(df_iv["StrikePrice"], df_iv["PE_IV"], label="Put IV")
-plt.xlabel("Strike Price"); plt.ylabel("Implied Vol (%)")
-plt.title(f"Vol Skew for {front.date()}")
-plt.legend(); plt.grid(); plt.tight_layout()
-plt.savefig(buf, format="png")
-plt.close()
-buf.seek(0)
-
-# 5) Write everything in one go
+# 4) Write everything in one go and embed a native Excel chart
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 filename  = f"nifty_dashboard_{timestamp}.xlsx"
 with pd.ExcelWriter(filename, engine="openpyxl") as writer:
@@ -44,11 +29,27 @@ with pd.ExcelWriter(filename, engine="openpyxl") as writer:
     df_front.to_excel(writer, sheet_name="Raw Data", index=False)
     df_iv.to_excel(writer, sheet_name="IV Data",  index=False)
 
-    # Embed the image before closing
+    # Access workbook and IV Data sheet
     book = writer.book
     ws   = book["IV Data"]
-    img  = Image(buf)
-    img.anchor = "F2"
-    ws.add_image(img)
 
-print(f"Created {filename} with Raw Data, IV Data, and embedded skew chart.")
+    # Create Excel native LineChart for volatility skew
+    chart = LineChart()
+    chart.title = f"Volatility Skew for {front.date()}"
+    chart.x_axis.title = "Strike Price"
+    chart.y_axis.title = "Implied Vol (%)"
+
+    max_row = ws.max_row
+    # StrikePrice in column A (1), PE_IV in C (3), CE_IV in D (4)
+    cats    = Reference(ws, min_col=1, min_row=2, max_row=max_row)
+    pe_data = Reference(ws, min_col=3, min_row=1, max_row=max_row)
+    ce_data = Reference(ws, min_col=4, min_row=1, max_row=max_row)
+
+    chart.add_data(pe_data, titles_from_data=True)
+    chart.add_data(ce_data, titles_from_data=True)
+    chart.set_categories(cats)
+
+    # Position chart
+    ws.add_chart(chart, "F2")
+
+print(f"Created {filename} with Raw Data, IV Data, and embedded native skew chart.")
